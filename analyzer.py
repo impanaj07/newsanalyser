@@ -6,10 +6,16 @@ import matplotlib.patches as patches #imports the patches module from matplotlib
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer #imports the SentimentIntensityAnalyzer class from the vaderSentiment module for performing sentiment analysis
 from groq import Groq
 from datetime import datetime 
+import spacy
+from rapidfuzz import fuzz
+from collections import Counter
+import textwrap
 
-NEWS_API_KEY="YOUR_NEWS_API_KEY" #retrieves the NEWS_API_KEY from the environment variables #retrieves the Gemini_API_KEY from the environment variables
 
-def fetch_headlines(topic:str, num:int=25)->list[dict]:#defines a function called fetch_headlines that takes a topic and an optional number of headlines to fetch, and returns a list of dictionaries containing the headlines and their corresponding sentiment scores
+NEWS_API_KEY="your_news_api_key_here" #retrieves the NEWS_API_KEY from the environment variables #retrieves the Gemini_API_KEY from the environment variables
+nlp=spacy.load("en_core_web_sm") #loads the small English language model from spaCy for natural language processing tasks
+
+def fetch_headlines(topic:str, num:int=20)->list[dict]:#defines a function called fetch_headlines that takes a topic and an optional number of headlines to fetch, and returns a list of dictionaries containing the headlines and their corresponding sentiment scores
     print(f"\n Fetching headlines for the `{topic}`..")#prints a message indicating that the function is fetching headlines for the specified topic
     url="https://newsapi.org/v2/everything" #sets the URL for the News API endpoint to fetch news articles
     params={
@@ -19,7 +25,7 @@ def fetch_headlines(topic:str, num:int=25)->list[dict]:#defines a function calle
         "pageSize":num,#sets the pageSize parameter to the specified number of headlines to fetch, which limits the number of news articles returned by the API to the specified number
         "apiKey":NEWS_API_KEY,#sets the apiKey parameter to the NEWS_API_KEY retrieved from the environment variables, which is required to authenticate the API request and access the news data
     }
-    response=requests.get(url,params=params)
+    response=requests.get(url,params=params)#requests.get() method is used to send an HTTP GET request to the specified URL with the provided parameters, and the response from the API is stored in the response variable. The response object contains information about the status of the request and the data returned by the API.
     response.raise_for_status() #raises an exception if the HTTP request returned an unsuccessful status code
     data=response.json()#parses the JSON response from the API into a Python dictionary using the json() method of the response object
     articles=data.get("articles",[])#retrieves the list of articles from the parsed JSON data using the get() method, which returns an empty list if the "articles" key is not found in the data. Each article is represented as a dictionary containing information such as the headline, source, publication date, and URL.
@@ -28,7 +34,26 @@ def fetch_headlines(topic:str, num:int=25)->list[dict]:#defines a function calle
         return []
     print(f"Fetched {len(articles)} articles.")
     return articles
-
+def deduplication(articles:list[dict],threshold:int=85)->list[dict]:
+    print("\n Removing duplicate headlines..")
+    seen_headlines=[]
+    unique_articles=[]
+    for article in articles:
+        headline=article.get("title","")
+        if not headline or headline=="[Removed]":
+            continue#just skip such headlines
+        is_duplicate=False
+        for seen in seen_headlines:#iterates over all the seen headlines 
+            similarity=fuzz.ratio(headline.lower(),seen.lower())
+            if similarity >=threshold:
+                is_duplicate=True
+                break
+        if not is_duplicate:
+            seen_headlines.append(headline)
+            unique_articles.append(article)
+    removed=len(articles)-len(unique_articles)
+    print(f"Removed {removed} duplicates. {len(unique_articles)} unique headlines remain.")
+    return unique_articles
 def analyze_sentiment(articles: list[dict])->list[dict]:
     print("\n Running sentiment analysis...")
     analyzer=SentimentIntensityAnalyzer() #creates an instance of the SentimentIntensityAnalyzer class
@@ -47,10 +72,10 @@ def analyze_sentiment(articles: list[dict])->list[dict]:
             label = "Neutral 😐"
         results.append({
             "headline":headline,
-            "source":article.get("source",{}).get("name","Unknown"),
+            "source":article.get("source",{}).get("name","Unknown"),#retrieves the source name of the article using nested get() methods, which return "Unknown" if the "source" key or the "name" key is not found in the article dictionary
             "compound":compound,
             "label":label,
-            "url":article.get("url",""),
+            "url":article.get("url",""),#
         })
     print(f"Analyzed sentiment for {len(results)} headlines.")
     return results
@@ -62,18 +87,44 @@ def print_results_table(results: list[dict]):
  
     for r in results:
         headline = r["headline"][:52] + "..." if len(r["headline"]) > 52 else r["headline"]
-        print(f"{headline:<55} {r['source']:<18} {r['compound']:>+.3f}  {r['label']}")
+        print(f"{headline:<55} {r['source']:<18} {r['compound']:>+.3f}  {r['label']}")#
  
     print("═" * 90)
 
+def extract_entities(results:list[dict])->list[dict]:
+    print("\n Extracting entities ....")
+    RELEVANT_LABELS={"PERSON","ORG","GPE","EVENT"}
+    LABEL_ICONS = {
+        "PERSON": "👤",
+        "ORG": "🏢",
+        "GPE": "🌍",
+        "EVENT": "🎯",
+    }
+    all_entities=[]
+    for r in results:
+        doc=nlp(r["headline"])#processes the headline of each article using the spaCy language model to create a Doc object, which contains linguistic annotations and allows for easy access to entities and other linguistic features
+        entities=[]
+        for ent in doc.ents:
+            if ent.label_ in RELEVANT_LABELS:
+                icon=LABEL_ICONS.get(ent.label_,"")#retrieves the corresponding icon for the entity label from the LABEL_ICONS dictionary, which maps entity labels to their respective icons. If the entity label is not found in the dictionary, it returns an empty string as a default value.
+                entities.append({
+                    "text":ent.text,
+                    "label":ent.label_,
+                    "icon":icon,
+                })
+                all_entities.append(ent.text)
+        r["entities"]=entities
+    entity_counts=Counter(all_entities)
+    print(f"✅ Entities extracted. Top mentions: {dict(entity_counts.most_common(5))}")
+    return results, entity_counts
 
 def get_summary(topic: str, results: list[dict]) -> str:
     print("\n Generating summary using Groq...")
 
-    client = Groq(api_key="YOUR_GROQ_API_KEY")
+    client = Groq(api_key="your_groq_api_key_here") #creates an instance of the Groq client using the provided API key, which is necessary to authenticate requests to the Groq API and access its language processing capabilities
 
     headlines_text = "\n".join(
-        [f"- [{r['label']}] {r['headline']} ({r['source']})" for r in results]
+        [f"- [{r['label']}] {r['headline']} ({r['source']})" for r in results] #
     )
 
     prompt = f"""Here are {len(results)} news headlines about `{topic}` with their sentiment labels:
@@ -138,22 +189,24 @@ def visualize_sentiment(topic:str,results:list[dict],summary:str):
  
 def main():
  
-    topic = input("\n🔎 Enter a topic to analyze (e.g. 'AI', 'cricket', 'climate'): ").strip()
+    topic = input("\n🔎 Enter a topic to analyze : ").strip()
     if not topic:
         topic = "artificial intelligence"
  
     # Stage 1: Fetch
-    articles = fetch_headlines(topic, num=25)
+    articles = fetch_headlines(topic, num=20)
     if not articles:
         return
- 
+    articles = deduplication(articles, threshold=85)
+
     # Stage 2: Sentiment
     results = analyze_sentiment(articles)
+    results, entity_counts = extract_entities(results)
     print_results_table(results)
  
     # Stage 3: AI Summary
     ai_summary = get_summary(topic, results)
-    print("\n🤖 Gemini says:")
+    print("\n🤖 Groq's AI says:")
     print("─" * 60)
     print(ai_summary)
     print("─" * 60)
@@ -162,7 +215,7 @@ def main():
     visualize_sentiment(topic, results, ai_summary)
  
     # Optional: Save to CSV
-    save = input("\n💾 Save results to CSV? (y/n): ").strip().lower()
+    save = input("\n Save results to CSV? (y/n): ").strip().lower()
     if save == "y":
         import csv
         filename = f"results_{topic.replace(' ', '_')}.csv"
@@ -172,7 +225,7 @@ def main():
             writer.writerows(results)
         print(f"✅ Saved to '{filename}'")
  
-    print("\n✨ Done! Great work.")
+    print("\n Done! Great work.")
  
  
 if __name__ == "__main__":
