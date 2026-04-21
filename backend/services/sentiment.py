@@ -1,6 +1,6 @@
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-analyzer = SentimentIntensityAnalyzer()
+analyzer = SentimentIntensityAnalyzer()#initializes an instance of the SentimentIntensityAnalyzer class from the vaderSentiment library, which is used to perform sentiment analysis on text data. This instance will be used later in the code to analyze the sentiment of news headlines and assign sentiment scores to them.
 
 def analyze_sentiment(articles: list[dict]) -> list[dict]:
     results = []

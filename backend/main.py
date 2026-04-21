@@ -8,7 +8,7 @@ app = FastAPI()
 def home():
     return {"message": "News Sentiment API running 🚀"}
 
-@app.get("/analyze")
+@app.get("/analyze") 
 def analyze(topic: str):
     articles = fetch_headlines(topic)
 
