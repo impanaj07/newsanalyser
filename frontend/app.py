@@ -6,6 +6,47 @@ import plotly.express as px
 # Backend URL
 API_URL = "http://127.0.0.1:8000/analyze"
 
+MAX_TOPIC_LENGTH = 100
+MIN_TOPIC_LENGTH = 2
+
+#input validation and error handling
+def validate_topic(topic: str) -> tuple[bool, str]:
+    if not topic or topic.strip() == "":
+        return False, "Please enter a topic before analyzing."
+    if len(topic.strip()) < MIN_TOPIC_LENGTH:
+        return False, f" Topic is too short. Please enter at least {MIN_TOPIC_LENGTH} characters."
+    if len(topic.strip()) > MAX_TOPIC_LENGTH:
+        return False, f" Topic is too long. Please keep it under {MAX_TOPIC_LENGTH} characters (you entered {len(topic.strip())})."
+    if topic.strip().replace(" ", "").isdigit():
+        return False, "Topic cannot be numbers only. Please enter a meaningful topic."
+    return True, ""
+ 
+#api call with error handling
+def fetch_analysis(topic:str)->tuple[dict | None,str]:
+    try:
+        response=requests.get(API_URL, params={"topic": topic.strip()}, timeout=30)
+        if response.status_code==422:
+            return None, "Invalid request sent to backend.Please try a different topic"
+        if response.status_code==429:
+            return None,"Too many requests.Please wait a momentnand try again"
+        if response.status_code==500:
+            return None, "Backend server error.Please try again later"
+        if response.status_code!=200:
+            return None, f"Unexpected error: {response.status_code}. Please try again later."
+        data=response.json()
+        return data, ""
+    except requests.exceptions.ConnectionError:
+        return None, " Cannot connect to the backend. Make sure the FastAPI server is running (`uvicorn main:app --reload`)."
+ 
+    except requests.exceptions.Timeout:
+        return None, " Request timed out. The backend is taking too long — please try again."
+ 
+    except requests.exceptions.JSONDecodeError:
+        return None, "Backend returned an invalid response. Please try again."
+ 
+    except Exception as e:
+        return None, f" Unexpected error: {str(e)}"
+
 st.set_page_config(
     page_title="News Sentiment Analyzer",
     layout="wide"
