@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
 
 # Backend URL
 API_URL = "http://127.0.0.1:8000/analyze"
@@ -64,13 +65,16 @@ analyze_btn = st.sidebar.button("🚀 Analyze")
 
 # Main Logic
 if analyze_btn:
+    # Validate topic
+    is_valid, error_msg = validate_topic(topic)
+    if not is_valid:
+        st.error(error_msg)
+        st.stop()
 
     with st.spinner("Fetching and analyzing news..."):
-        try:
-            response = requests.get(API_URL, params={"topic": topic})
-            data = response.json()
-        except Exception as e:
-            st.error(f"Error connecting to backend: {e}")
+        data, error_msg = fetch_analysis(topic)
+        if data is None:
+            st.error(error_msg)
             st.stop()
 
     if "error" in data:
@@ -107,10 +111,21 @@ if analyze_btn:
     st.subheader("🗞 Headlines")
 
     for _, row in filtered.iterrows():
+        published_at = ""
+        if row['publishedAt']:
+            try:
+                dt = datetime.fromisoformat(row['publishedAt'].replace('Z', '+00:00'))
+                published_at = dt.strftime('%Y-%m-%d %H:%M UTC')
+            except:
+                published_at = row['publishedAt']
+        else:
+            published_at = "Unknown"
+
         st.markdown(f"""
         ### {row['headline']}
         **Source:** {row['source']}  
         **Sentiment:** {row['label']}  
+        **Published:** {published_at}
 
         🔗 [Read full article]({row['url']})
         """)

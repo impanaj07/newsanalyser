@@ -26,6 +26,7 @@ def analyze_sentiment(articles: list[dict]) -> list[dict]:
             "compound": compound,
             "label": label,
             "url": article.get("url", ""),
+            "publishedAt": article.get("publishedAt", ""),
         })
 
     return results
