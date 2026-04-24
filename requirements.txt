@@ -2,4 +2,7 @@ google-generativeai
 requests
 vaderSentiment
 matplotlib
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
  
