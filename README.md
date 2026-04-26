@@ -8,13 +8,13 @@ Built as a learning project covering Data Science, NLP, and GenAI — evolving f
 
 ## 🚀 Live Demo
 
-> Coming soon — deployment in progress
+> progress
 
 ---
 
 ## 🖼️ Screenshot
 
-> Add a screenshot of your Streamlit UI here
+> progress
 
 ---
 
@@ -228,7 +228,7 @@ Streamlit renders charts, table, and summary
 ## 🙋 Author
 
 **Impana J**
-Built as a Data Science + GenAI learning project.
+Built as a  learning project.
 
 ---
 
