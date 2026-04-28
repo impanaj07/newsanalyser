@@ -6,16 +6,22 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 
-# Secret key for JWT - in production, use environment variable
+
+# Secret keys for JWT - in production, use environment variables
 SECRET_KEY = "your-secret-key-change-in-production"
+REFRESH_SECRET_KEY = "your-refresh-secret-key-change-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # ✅ used properly now
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+
 # In-memory user storage (replace with database in production)
 users_db = {}
+# In-memory refresh token storage (replace with DB in production)
+refresh_tokens_db = {}
 
 # =========================
 # Pydantic Models
@@ -25,9 +31,11 @@ class User(BaseModel):
     email: str
     hashed_password: str
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: str
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -43,21 +51,28 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
+
 # =========================
 # JWT Token Creation
 # =========================
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        # ✅ FIXED: uses defined constant instead of hardcoded 15
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
     to_encode.update({"exp": expire})
-
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
@@ -100,18 +115,16 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
 def register_user(username: str, email: str, password: str) -> dict:
     if username in users_db:
         return {"success": False, "message": "Username already exists"}
-
     if any(u.get("email") == email for u in users_db.values()):
         return {"success": False, "message": "Email already registered"}
-
     hashed_password = get_password_hash(password)
-
     users_db[username] = {
         "username": username,
         "email": email,
         "hashed_password": hashed_password
     }
-
+    # Remove any old refresh tokens for this user
+    refresh_tokens_db.pop(username, None)
     return {"success": True, "message": "User registered successfully"}
 
 
@@ -120,11 +133,28 @@ def register_user(username: str, email: str, password: str) -> dict:
 # =========================
 def authenticate_user(username: str, password: str) -> Optional[str]:
     user = users_db.get(username)
-
     if not user:
         return None
-
     if not verify_password(password, user["hashed_password"]):
         return None
-
     return username
+
+
+# =========================
+# Refresh Token Logic
+# =========================
+def store_refresh_token(username: str, refresh_token: str):
+    refresh_tokens_db[username] = refresh_token
+
+def verify_refresh_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(token, REFRESH_SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+        # Check if token matches stored one
+        if refresh_tokens_db.get(username) != token:
+            return None
+        return username
+    except JWTError:
+        return None
