@@ -4,17 +4,6 @@ A full-stack AI-powered news analysis tool that fetches real-time headlines, per
 
 Built as a learning project covering Data Science, NLP, and GenAI — evolving from a terminal script to a full-stack web application.
 
----
-
-## 🚀 Live Demo
-
-> progress
-
----
-
-## 🖼️ Screenshot
-
-> progress
 
 ---
 
@@ -228,10 +217,10 @@ Streamlit renders charts, table, and summary
 ## 🙋 Author
 
 **Impana J**
-Built as a  learning project.
+
 
 ---
 
 ## 📄 License
 
-MIT License — feel free to use and build on this project.
+MIT License
