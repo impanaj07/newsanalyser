@@ -5,8 +5,8 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-
-
+import re 
+from backend.config import settings
 # Secret keys for JWT - in production, use environment variables
 SECRET_KEY = "your-secret-key-change-in-production"
 REFRESH_SECRET_KEY = "your-refresh-secret-key-change-in-production"
